@@ -35,7 +35,7 @@ const productSchema = new mongoose.Schema(
         message: "Invalid image Url format",
       },
     },
-    catergory: {
+    category: {
       type: String,
       trim: true,
     },

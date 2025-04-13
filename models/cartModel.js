@@ -7,7 +7,7 @@ const cartSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    product: [
+    item: [
       {
         productId: {
           type: mongoose.Schema.Types.ObjectId,
@@ -28,12 +28,7 @@ const cartSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-cart.virtual("totalPrice ").get(function () {
-  return this.product.reduce;
-  (total, product) => {
-    return total + product.quantity;
-  };
-});
+
 cartSchema.index({ userId: 1, active: 1 });
 const Cart = mongoose.model("Cart", cartSchema);
 
