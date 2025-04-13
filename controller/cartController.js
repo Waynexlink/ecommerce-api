@@ -84,4 +84,77 @@ const viewCart = async (req, res, next) => {
     });
   }
 };
-module.exports = { addToCart, viewCart };
+
+const removeFromCart = async (req, res, next) => {
+  const userId = req.user._id;
+  const { productId } = req.params;
+
+  try {
+    const cart = Cart.findOne({ productId });
+    if (!cart)
+      return res.status(404).json({
+        status: "fail",
+        message: "Cart not found",
+      });
+    const itemIndex = cart.items.findIndex(
+      (item) => item.productId === productId
+    );
+    if (itemIndex > -1) {
+      cart.items.splice(itemIndex, 1);
+    } else {
+      res.status(404).json({
+        status: "fail",
+        message: "Item not found",
+      });
+    }
+    await cart.save();
+    res.status(200).json({
+      status: "success",
+    }).end;
+  } catch (error) {
+    console.log("Cart not added", error.stack, error.message);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+    });
+  }
+};
+
+const updateCartItemQuantity = async (req, res, next) => {
+  const newProductQuantity = req.body.quantity;
+  const userId = req.user._id;
+  const { productId } = req.params;
+
+  const numQuantity = parseInt(newProductQuantity, 10);
+
+  if (isNaN(numQuantity) || numQuantity <= 0)
+    return res
+      .status(400)
+      .json({ status: "fail", message: "Invalid quantity provided" });
+
+  try {
+    const cart = Cart.findOne({ userId });
+    if (!cart)
+      return res.status(404).json({ status: fail, message: "Task not found" });
+
+    const itemIndex = cart.findIndex((item) => {
+      item.productId === productId;
+    });
+
+    if (itemIndex > -1) {
+      cart.item[itemIndex].quantity = numQuantity;
+      await cart.save();
+    } else {
+      res.status(404).json({
+        status: "fail",
+        message: "item not found in cart",
+      });
+    }
+  } catch (error) {}
+};
+module.exports = {
+  addToCart,
+  viewCart,
+  removeFromCart,
+  updateCartItemQuantity,
+};
