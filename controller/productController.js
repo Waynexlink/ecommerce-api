@@ -51,4 +51,28 @@ const getProductById = async (req, res, next) => {
   }
 };
 
-module.exports = { getAllProducts, getProductById };
+const createProduct = async (req, res, next) => {
+  try {
+    const { name, description, price, quantity, image, category } = req.body;
+    //am not sure image should be there its probably gonna be handled with cloudinary
+    const product = await Product.create({
+      name,
+      description,
+      price,
+      quantity,
+      image,
+      category,
+    });
+    res.status(201).json({
+      status: success,
+      product,
+    });
+  } catch (error) {
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ status: "fail", message: error.message });
+    }
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+module.exports = { getAllProducts, getProductById, createProduct };

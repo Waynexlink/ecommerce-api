@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/userModel");
 
-const authMiddleware = async (req, res, next) => {
+const requireAuth = async (req, res, next) => {
   try {
     let token;
     if (
@@ -38,5 +38,16 @@ const authMiddleware = async (req, res, next) => {
     });
   }
 };
-// const adminMiddleware = (req,res,nex)
-module.exports = authMiddleware;
+const requireAdmin = (req, res, next) => {
+  try {
+    if (req.user && req.user.role === "ADMIN") {
+      next();
+    }
+  } catch (error) {
+    res.status(403).json({
+      status: "fail",
+      message: "Forbidden: Access restricted to administrators.",
+    });
+  }
+};
+module.exports = { requireAuth, requireAdmin };
