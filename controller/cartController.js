@@ -61,9 +61,10 @@ const addToCart = async (req, res, next) => {
 const viewCart = async (req, res, next) => {
   const userId = req.user._id;
   try {
-    const cart = await Cart.findOne({ userId }).populate({path: items.productId,
-      ref:
-
+    const cart = await Cart.findOne({ userId }).populate({
+      path: "items.productId",
+      select: "name price image",
+      model: "Product",
     });
     if (!cart)
       return res.status(201).json({
