@@ -11,6 +11,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/auth", authRoute);
 app.use("/api/products", productRoute);
 app.use("/api/cart", cartRoute);
-app.use("/api/order", orderRoute);
+app.use("/api/orders", orderRoute);
 
 module.exports = app;
