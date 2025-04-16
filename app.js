@@ -1,4 +1,6 @@
 const express = require("express");
+const globalErrorHandler = require("./controller/errorController");
+const AppError = require("./utils/AppError");
 const app = express();
 
 const authRoute = require("./routes/authRoute");
@@ -12,5 +14,18 @@ app.use("/api/auth", authRoute);
 app.use("/api/products", productRoute);
 app.use("/api/cart", cartRoute);
 app.use("/api/orders", orderRoute);
+
+//*IMPORTANT*//
+//handling unregistered routes
+// app.all(`${*}`, (req, res) => {
+//   next(
+//     new AppError(
+//       `This route is not registered ${req.originalUrl} on this server`
+//     ),
+//     404
+//   );
+// });
+
+app.use(globalErrorHandler);
 
 module.exports = app;

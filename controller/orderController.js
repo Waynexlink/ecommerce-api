@@ -2,172 +2,119 @@ const Cart = require("../models/cartModel");
 const Order = require("../models/orderModel");
 const Product = require("../models/productModel");
 
-const createOrderFromCart = async (req, res) => {
+const catchAsync = require("../utils/catchAsync");
+const AppError = require("../utils/AppError");
+
+const createOrderFromCart = catchAsync(async (req, res, next) => {
   const userId = req.user._id;
-
-  try {
-    const cart = await Cart.findOne({ userId }).populate({
-      path: "items.productId",
-      select: "name price",
-    });
-    if (!cart || cart.items.length === 0) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Cannot create order for empty cart",
-      });
+  const cart = await Cart.findOne({ userId }).populate({
+    path: "items.productId",
+    select: "name price",
+  });
+  if (!cart || cart.items.length === 0) {
+    return next(new AppError("Cannot create order for empty cart", 400));
+  }
+  let totalPrice = 0;
+  let orderItem = cart.items.map((item) => {
+    if (item.productId || typeof item.productId.price === undefined) {
+      throw new Error(
+        `product details missing for items id:${item.productId?._id}`
+      );
     }
-    let totalPrice = 0;
-    let orderItem = cart.items.map((item) => {
-      if (item.productId || typeof item.productId.price === undefined) {
-        throw new Error(
-          `product details missing for items id:${item.productId?._id}`
-        );
-      }
-      const itemPrice = item.productId.price;
-      const itemQuantity = item.productQuantity;
-      totalPrice += itemPrice * itemQuantity;
-      return {
-        productId: item.productId._id,
-        productQuantity: itemQuantity,
-        priceAtOrder: itemPrice,
-      };
-    });
+    const itemPrice = item.productId.price;
+    const itemQuantity = item.productQuantity;
+    totalPrice += itemPrice * itemQuantity;
+    return {
+      productId: item.productId._id,
+      productQuantity: itemQuantity,
+      priceAtOrder: itemPrice,
+    };
+  });
 
-    const newOrder = await Order.create({
-      userId,
-      orderItem,
-      totalPrice,
-    });
+  const newOrder = await Order.create({
+    userId,
+    orderItem,
+    totalPrice,
+  });
 
-    res.status(201).json({
+  res.status(201).json({
+    status: "success",
+    message: "Order created successfully",
+    newOrder,
+  });
+
+  await Cart.deleteOne({ userId });
+});
+const viewMyOrders = catchAsync(async (req, res, next) => {
+  const userId = req.user._id;
+  const orders = await Order.find({ userId }).populate({
+    path: "items.productId",
+    select: "name price",
+  });
+
+  if (!orders) {
+    return res.status(200).json({
       status: "success",
-      message: "Order created successfully",
-      newOrder,
-    });
-
-    await Cart.deleteOne({ userId });
-  } catch (error) {
-    console.log(`Error creating order from cart: ${error} `);
-    res.status(500).json({
-      status: "error",
-      message: error.message || "Internal server error creating order",
+      message: "No orders yet",
+      orders: [],
     });
   }
-};
-const viewMyOrders = async (req, res) => {
-  const userId = req.user._id;
-  try {
-    const orders = await Order.find({ userId }).populate({
-      path: "items.productId",
-      select: "name price",
-    });
+  res.status(200).json({
+    status: "success",
+    message: "orders fetched successfully",
+    orders,
+  });
+});
 
-    if (!orders) {
-      return res.status(200).json({
-        status: "success",
-        message: "No orders yet",
-        orders: [],
-      });
-    }
-    res.status(200).json({
-      status: "success",
-      message: "orders fetched successfully",
-      orders,
-    });
-  } catch (error) {
-    console.log(`Error fetching orders: ${error} `);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error creating order",
-    });
-  }
-};
-
-const viewOrder = async (req, res) => {
+const viewOrder = catchAsync(async (req, res, next) => {
   const userId = req.user._id;
   const { orderId } = req.params;
-  try {
-    const order = await Order.findOne({ _id: orderId, userId }).populate({
-      path: "items.productId",
-      select: "name price",
-    });
-    if (!order)
-      return res.status(404).message({
-        status: "fail",
-        message: "This order does not exist or forbidden",
-      });
-    res.status(200).json({
-      status: "success",
-      message: "order retrived successfully",
-      order,
-    });
-  } catch (error) {
-    console.log(`Error fetching order: ${error} `);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error creating order",
-    });
-  }
-};
+  const order = await Order.findOne({ _id: orderId, userId }).populate({
+    path: "items.productId",
+    select: "name price",
+  });
+  if (!order)
+    return next(
+      new AppError("This order does not exist or cannot be accessed", 404)
+    );
+  res.status(200).json({
+    status: "success",
+    message: "order retrived successfully",
+    order,
+  });
+});
 //admin operations
-const viewAllOrders = (req, res) => {
-  try {
-    //restricted to just admin
-    const order = Order.find();
-    if (!order.length)
-      return res.status(404).json({
-        status: "fail",
-        message: "No order found",
-        order: [],
-      });
+const viewAllOrders = catchAsync(async (req, res) => {
+  //restricted to just admin
+  const order = Order.find();
+  if (!order.length) return next(new AppError("No order found", 404));
 
-    res.status(200).json({
-      status: "success",
-      message: "Orders retrived successfully",
-      order,
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error retriving orders",
-    });
-  }
-};
-const updateOrder = (req, res) => {
+  res.status(200).json({
+    status: "success",
+    message: "Orders retrived successfully",
+    order,
+  });
+});
+const updateOrder = catchAsync(async (req, res, next) => {
   const { orderId } = req.params;
   const { orderStatus } = req.body;
-
-  try {
-    const validStatus = ["processing", "shipped", "delivered"];
-    if (!validStatus.includes(orderStatus)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Status not valid",
-      });
-    }
-    const updatedOrder = Order.findByIdAndUpdate(
-      orderId,
-      { orderStatus },
-      { new: true, runValidators: true }
-    );
-    if (!updatedOrder)
-      return res.status(404).json({
-        status: "fail",
-        message: "Order not found",
-      });
-
-    res.status(200).json({
-      status: "success",
-      message: "Order status updated",
-      order: updatedOrder,
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error updating orders",
-    });
+  const validStatus = ["processing", "shipped", "delivered"];
+  if (!validStatus.includes(orderStatus)) {
+    return next(new AppError("Status not valid", 400));
   }
-};
+  const updatedOrder = await Order.findByIdAndUpdate(
+    orderId,
+    { orderStatus },
+    { new: true, runValidators: true }
+  );
+  if (!updatedOrder) return next(new AppError("Order not found", 404));
+
+  res.status(200).json({
+    status: "success",
+    message: "Order status updated",
+    order: updatedOrder,
+  });
+});
 
 module.exports = {
   createOrderFromCart,
