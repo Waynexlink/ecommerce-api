@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const sendEmail = require("../utils/emailSender");
+const crypto = require("crypto");
 //signup cpontroller
 const signupUser = catchAsync(async (req, res, next) => {
   const { name, email, password } = req.body;
@@ -63,9 +64,7 @@ const forgotPassword = catchAsync(async (req, res, next) => {
   }
 
   const resetToken = user.createPasswordResetToken();
-  console.log(resetToken);
   await user.save({ validateBeforeSave: false });
-  console.log(process.env.FRONTEND_URL);
   const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
   const message = `
 <!DOCTYPE html>
@@ -223,9 +222,9 @@ const resetPassword = catchAsync(async (req, res, next) => {
     .update(req.params.token)
     .digest("hex");
 
-  const user = await User.find({
+  const user = await User.findOne({
     passwordResetToken: hashedToken,
-    passwordResetExpires: { gt: Date.now() },
+    passwordResetExpires: { $gt: Date.now() },
   });
 
   if (!user) {
