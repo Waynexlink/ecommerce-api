@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const validator = require("validator");
 
 const userSchema = new mongoose.Schema(
   {
@@ -15,7 +17,7 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       required: [true, "A user should have an email"],
       index: true,
-      match: /^\S+@\S+\.\S+$/,
+      validator: [validator.isEmail, "Please provide a valid email"],
     },
     password: {
       type: String,
@@ -28,6 +30,8 @@ const userSchema = new mongoose.Schema(
       default: "USER",
       uppercase: true,
     },
+    passwordResetToken: String,
+    passwordResetExpires: Date,
   },
   { timestamps: true }
 );
@@ -43,6 +47,21 @@ userSchema.methods.toJSON = function () {
   const userObject = this.toObject();
   delete userObject.password;
   return userObject;
+};
+
+userSchema.method.createPasswordResetToken = function () {
+  //generate plain token
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
+  //hash the reset token before saving to the database
+  this.passwordResetToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  this.passwordResetExpires = Date.now + 10 * 60 * 1000;
+  //return plain token
+  return resetToken;
 };
 const User = mongoose.model("User", userSchema);
 
