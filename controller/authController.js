@@ -47,4 +47,6 @@ const loginUser = catchAsync(async (req, res, next) => {
     token,
   });
 });
-module.exports = { signupUser, loginUser };
+const forgotPassword = catchAsync(async (req, res, next) => {});
+const resetPassword = catchAsync(async (req, res, next) => {});
+module.exports = { signupUser, loginUser, forgotPassword, resetPassword };
