@@ -52,7 +52,7 @@ userSchema.methods.toJSON = function () {
   return userObject;
 };
 
-userSchema.method.createPasswordResetToken = function () {
+userSchema.methods.createPasswordResetToken = function () {
   //generate plain token
   const resetToken = crypto.randomBytes(32).toString("hex");
 
@@ -62,7 +62,7 @@ userSchema.method.createPasswordResetToken = function () {
     .update(resetToken)
     .digest("hex");
 
-  this.passwordResetExpires = Date.now + 10 * 60 * 1000;
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
   //return plain token
   return resetToken;
 };
