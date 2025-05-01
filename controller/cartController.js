@@ -2,22 +2,36 @@ const Cart = require("../models/cartModel");
 const Product = require("../models/productModel");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
+const { v4: uuidv4 } = require("uuid");
 
 const addToCart = catchAsync(async (req, res, next) => {
   const { productId, productQuantity } = req.body;
-  const userId = req.user._id;
+  const userId = req.user ? req.user._id : null;
+  const sessionId = req.sessionID || uuidv4();
 
   const numQuantity = parseInt(productQuantity, 10);
   if (isNaN(numQuantity) || numQuantity <= 0) {
-    res.status(400).json({
-      status: fail,
-      message: "Invalid quantity provided",
-    });
+    return new AppError(
+      "Invalid quantity provided. Quantity must be a positive number",
+      400
+    );
   }
-  const productExist = await Product.findById(productId);
-  if (!productExist) return next(new AppError("Product not found", 404));
+  const product = await Product.findById(productId);
+  if (!product) return next(new AppError("Product not found", 404));
+  if (product.quantity < numQuantity)
+    return next(
+      new AppError(
+        `Product quantity is less than ${numQuantity}. Only ${product.quantity} available`,
+        400
+      )
+    );
 
-  let cart = await Cart.findOne({ userId });
+  let cart;
+  if (userId) {
+    cart = await Cart.findOne({ userId, active: true });
+  } else {
+    cart = await Cart.findOne({ sessionId, active: true });
+  }
 
   if (cart) {
     const itemIndex = cart.items.findIndex(
