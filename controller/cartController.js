@@ -121,18 +121,32 @@ const updateCartItemQuantity = catchAsync(async (req, res, next) => {
 });
 
 const viewCart = catchAsync(async (req, res, next) => {
-  const userId = req.user._id;
-  const cart = await Cart.findOne({ userId }).populate({
-    path: "items.productId",
-    select: "name price image",
-    model: "Product",
-  });
-  if (!cart)
-    return res.status(201).json({
+  const userId = req.user ? req.user._id : null;
+  const sessionId = req.session.id || uuidv4();
+
+  let cart;
+  if (userId) {
+    cart = await Cart.findOne({ userId, active: true }).populate({
+      path: "items.productId",
+      select: "name price image quantity",
+      model: "Product",
+    });
+  } else {
+    cart = await Cart.findOne({ sessionId, active: true }).populate({
+      path: "items.productId",
+      select: "name price image quantity",
+      model: "Product",
+    });
+  }
+
+  if (!cart) {
+    return res.status(200).json({
       status: "success",
       message: "Cart is empty",
       cart: null,
     });
+  }
+
   res.status(200).json({
     status: "success",
     cart,
@@ -140,30 +154,143 @@ const viewCart = catchAsync(async (req, res, next) => {
 });
 
 const removeFromCart = catchAsync(async (req, res, next) => {
-  const userId = req.user._id;
-  const { productId } = req.params;
-  const cart = Cart.findOne({ userId });
-  if (!cart) return next(new AppError("Cart not found for this user", 404));
+  const userId = req.user ? req.user._id : null;
+  const sessionId = req.session.id || uuidv4();
+  const { id: productId } = req.params;
+
+  let cart;
+  if (userId) {
+    cart = await Cart.findOne({ userId, active: true });
+  } else {
+    cart = await Cart.findOne({ sessionId, active: true });
+  }
+
+  if (!cart) return next(new AppError("Cart not found", 404));
 
   const itemIndex = cart.items.findIndex(
     (item) => item.productId.toString() === productId
   );
+
   if (itemIndex > -1) {
     cart.items.splice(itemIndex, 1);
     await cart.save();
-    //success message
-    res.status(201).json({
+    res.status(200).json({
       status: "success",
       message: "Item removed from cart",
     });
   } else {
-    return next(new AppError("Item not found", 404));
+    return next(new AppError("Item not found in cart", 404));
   }
 });
 
+const mergeGuestCart = catchAsync(async (req, res, next) => {
+  const userId = req.user._id;
+  const sessionId = req.session.id;
+
+  const guestCart = await Cart.findOne({ sessionId, active: true });
+  let userCart = await Cart.findOne({ userId, active: true });
+
+  if (guestCart) {
+    if (userCart) {
+      // Merge items
+      for (const guestItem of guestCart.items) {
+        const product = await Product.findById(guestItem.productId);
+        if (!product) continue;
+        if (product.quantity < guestItem.productQuantity) {
+          return next(
+            new AppError(
+              `Only ${product.quantity} items available for ${product.name}`,
+              400
+            )
+          );
+        }
+
+        const itemIndex = userCart.items.findIndex(
+          (item) => item.productId.toString() === guestItem.productId.toString()
+        );
+        if (itemIndex > -1) {
+          userCart.items[itemIndex].productQuantity +=
+            guestItem.productQuantity;
+          if (product.quantity < userCart.items[itemIndex].productQuantity) {
+            return next(
+              new AppError(
+                `Only ${product.quantity} items available for ${product.name}`,
+                400
+              )
+            );
+          }
+        } else {
+          userCart.items.push({
+            productId: guestItem.productId,
+            productQuantity: guestItem.productQuantity,
+          });
+        }
+      }
+      await userCart.save();
+      await guestCart.deleteOne(); // Remove guest cart
+    } else {
+      // Convert guest cart to user cart
+      guestCart.userId = userId;
+      guestCart.sessionId = null;
+      await guestCart.save();
+      userCart = guestCart;
+    }
+    req.session.cartId = null; // Clear session cart
+    res.status(200).json({
+      status: "success",
+      message: "Guest cart merged successfully",
+      cart: userCart,
+    });
+  } else {
+    res.status(200).json({
+      status: "success",
+      message: "No guest cart to merge",
+      cart: userCart || null,
+    });
+  }
+});
+const calculateCartTotal = catchAsync(async (req, res, next) => {
+  const userId = req.user ? req.user._id : null;
+  const sessionId = req.session.id || uuidv4();
+
+  let cart;
+  if (userId) {
+    cart = await Cart.findOne({ userId, active: true }).populate({
+      path: "items.productId",
+      select: "price",
+      model: "Product",
+    });
+  } else {
+    cart = await Cart.findOne({ sessionId, active: true }).populate({
+      path: "items.productId",
+      select: "price",
+      model: "Product",
+    });
+  }
+
+  if (!cart || cart.items.length === 0) {
+    return res.status(200).json({
+      status: "success",
+      message: "Cart is empty",
+      total: 0,
+    });
+  }
+
+  const total = cart.items.reduce((sum, item) => {
+    const price = item.productId.price || 0;
+    return sum + price * item.productQuantity;
+  }, 0);
+
+  res.status(200).json({
+    status: "success",
+    total,
+  });
+});
 module.exports = {
   addToCart,
   viewCart,
   removeFromCart,
   updateCartItemQuantity,
+  mergeGuestCart,
+  calculateCartTotal,
 };
