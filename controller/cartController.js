@@ -39,9 +39,15 @@ const addToCart = catchAsync(async (req, res, next) => {
     );
 
     if (itemIndex > -1) {
-      cart.items[itemIndex].productQuantity += numQuantity;
+      const newQuantity = cart.items[itemIndex].productQuantity + numQuantity;
+      if (itemIndex < newQuantity) {
+        return next(
+          new AppError(`Only ${product.quantity} available in stock `)
+        );
+      }
+      cart.items[itemIndex].productQuantity = newQuantity;
     } else {
-      cart.items.push({ productId, productQuantity });
+      cart.items.push({ productId, productQuantity: numQuantity });
     }
     await cart.save();
     res.status(200).json({
@@ -52,13 +58,65 @@ const addToCart = catchAsync(async (req, res, next) => {
   } else {
     const newCart = await Cart.create({
       userId,
-      items: [{ productId, productQuantity }],
+      sessionId: userId ? null : sessionId,
+      items: [{ productId, productQuantity: numQuantity }],
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     });
+    if (!userId) {
+      req.session.cartId = newCart._id;
+    }
     res.status(201).json({
       status: "success",
       message: "Cart created and item added",
+      cart: newCart,
+    });
+  }
+});
+
+const updateCartItemQuantity = catchAsync(async (req, res, next) => {
+  const { quantity } = req.body;
+  const userId = req.user ? req.user._id : null;
+  const { id: productId } = req.params;
+  const sessionId = req.session.id || uuidv4();
+
+  const numQuantity = parseInt(quantity, 10);
+
+  if (isNaN(numQuantity) || numQuantity <= 0)
+    return next(
+      new AppError(
+        "Invalid quantity provided. Quantity must be a positive number",
+        400
+      )
+    );
+
+  const product = await Product.findById({ productId });
+  if (!product) return next(new AppError("Product not found", 404));
+  if (product.quantity < numQuantity)
+    return next(
+      new AppError(`Only ${product.quantity} available in stock`, 400)
+    );
+  let cart;
+  if (userId) {
+    const cart = Cart.findById({ userId, active: true });
+  } else {
+    const cart = Cart.findById({ userId, active: true });
+  }
+  if (!cart) return next(new AppError("Cart not found.", 404));
+
+  const itemIndex = cart.items.findIndex((item) => {
+    item.productId.toString() === productId;
+  });
+
+  if (itemIndex > -1) {
+    cart.items[itemIndex].quantity = numQuantity;
+    await cart.save();
+    res.status(200).json({
+      status: "success",
+      message: "Cart item quantity updated ",
       cart,
     });
+  } else {
+    return next(new AppError("item not found in cart", 404));
   }
 });
 
@@ -103,40 +161,6 @@ const removeFromCart = catchAsync(async (req, res, next) => {
   }
 });
 
-const updateCartItemQuantity = catchAsync(async (req, res, next) => {
-  const newProductQuantity = req.body.quantity;
-  const userId = req.user._id;
-  const { productId } = req.params;
-
-  const numQuantity = parseInt(newProductQuantity, 10);
-
-  if (isNaN(numQuantity) || numQuantity <= 0)
-    return next(
-      new AppError(
-        "Invalid quantity provided. Quantity must be a positive number",
-        400
-      )
-    );
-
-  const cart = await Cart.findOne({ userId });
-  if (!cart) return next(new AppError("Cart not found.", 404));
-
-  const itemIndex = cart.items.findIndex((item) => {
-    item.productId.toString() === productId;
-  });
-
-  if (itemIndex > -1) {
-    cart.items[itemIndex].quantity = numQuantity;
-    await cart.save();
-    res.status(200).json({
-      status: "success",
-      message: "Cart item quantity updated ",
-      cart,
-    });
-  } else {
-    return next(new AppError("item not found in cart", 404));
-  }
-});
 module.exports = {
   addToCart,
   viewCart,

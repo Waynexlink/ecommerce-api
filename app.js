@@ -1,6 +1,8 @@
 const express = require("express");
 const globalErrorHandler = require("./controller/errorController");
 const AppError = require("./utils/AppError");
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
 const app = express();
 
 const authRoute = require("./routes/authRoute");
